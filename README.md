@@ -92,4 +92,4 @@ We run multi-tenant Laravel SaaS in production at [Blaze](https://blaze.uz). Eve
 
 ## License
 
-[MIT](LICENSE) © [Blaze](https://blaze.uz)
+[MIT](LICENSE) © Shaxzodbek Qambaraliyev / [Blaze](https://blaze.uz)
