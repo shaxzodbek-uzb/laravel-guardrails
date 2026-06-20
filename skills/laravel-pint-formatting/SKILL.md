@@ -16,11 +16,11 @@ When generated code uses different spacing, import ordering, or brace placement 
 ## Rules
 
 1. **Run Pint after generating or editing any PHP, before presenting or committing.** `./vendor/bin/pint`. Treat unformatted output as an incomplete change.
-2. **Use `--dirty` locally for speed.** `./vendor/bin/pint --dirty` formats only files changed according to Git — fast, and exactly the files you just touched.
+2. **Use `--dirty` locally for speed.** `./vendor/bin/pint --dirty` formats only files with uncommitted changes according to Git — fast, and exactly the files you just touched. (In CI against a base branch, `--diff=origin/main` is the analogous narrowing.)
 3. **Never hand-fight Pint.** If Pint reformats your code, that *is* the house style. Don't reformat against it or sprinkle ignore comments to win a style preference.
 4. **Gate CI with `--test`.** `./vendor/bin/pint --test` makes **no changes** and exits non-zero if anything is unformatted — fail the build on style drift so it never reaches `main`.
 5. **Default to the `laravel` preset; deviate only via `pint.json`, minimally.** Add a `pint.json` only to change the preset or toggle specific rules, and keep deviations few and justified. No `pint.json` = the sensible `laravel` preset.
-6. **Use `--bail` / `-v` when diagnosing.** `-v` shows which rules changed which files; `--bail` stops at the first file needing changes (handy in tight CI loops).
+6. **Use `--bail` / `-v` when diagnosing.** `-v` shows which rules changed which files; `--bail` is `--test` with fail-fast — it makes **no changes** and stops at the first file with a style error (a fast pre-flight check before the full `--test` run).
 7. **Automate it.** A pre-commit hook running `pint --dirty` (or a CI auto-fix step) keeps humans from having to remember — but the `--test` gate is the non-negotiable baseline.
 
 ## Good vs bad
@@ -88,7 +88,8 @@ jobs:
 # .git/hooks/pre-commit  (chmod +x)
 #!/usr/bin/env bash
 ./vendor/bin/pint --dirty
-git add $(git diff --cached --name-only --diff-filter=ACM | grep '\.php$')
+# Re-stage the .php files Pint may have reformatted (no-ops if none):
+git diff --cached --name-only --diff-filter=ACM -- '*.php' | xargs -r git add
 ```
 
 ## How to verify

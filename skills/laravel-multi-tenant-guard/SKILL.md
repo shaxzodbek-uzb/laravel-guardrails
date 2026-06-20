@@ -20,13 +20,13 @@ The expensive lesson behind this skill: a production CRM where **almost** every 
 1. **NEVER trust a tenant identifier from request input** — not the body, query string, route parameter, or a client-set header. Derive the current tenant **only** from server-side authenticated context: the logged-in user's tenant, the resolved subdomain/domain, or a signed token verified on the server. Accepting `tenant_id` from input is a direct IDOR.
 2. **Scope at the lowest layer so it cannot be forgotten.** Put a **global scope** on every tenant-owned model via a `BelongsToTenant` trait that (a) filters all queries by the current tenant and (b) auto-fills `tenant_id` on the `creating` event. A developer (or an AI agent) writing `Post::all()` then gets *only* this tenant's posts automatically — the safe default is the only default.
 3. **`tenant_id` must NEVER be mass-assignable from user input.** Keep it out of `$fillable`; set it server-side (the trait does this on `creating`). Otherwise a crafted request reassigns a record to another tenant.
-4. **Authorize EVERY action with a Policy** — and the policy must verify the record belongs to the current tenant, not merely that the user has a role. Use `authorizeResource()`, `$this->authorize()`, or `Gate`. Enforce 100% coverage with an architecture test (below) or a base controller that fails closed. A role check without an ownership check still leaks.
+4. **Authorize EVERY action with a Policy** — and the policy must verify the record belongs to the current tenant, not merely that the user has a role. Use `Gate::authorize()`, `$request->user()->can()`, the `can` route middleware, or `$this->authorize()` / `authorizeResource()`. Note: since Laravel 11 the slim base controller no longer pulls in the `AuthorizesRequests` trait, so `$this->authorize()` / `authorizeResource()` only exist if you `use AuthorizesRequests` in `app/Http/Controllers/Controller.php` — otherwise prefer `Gate::authorize()`, which always works. Enforce 100% coverage with an architecture test (below) or a base controller that fails closed. A role check without an ownership check still leaks.
 5. **Scope route-model binding.** `/posts/{post}` will happily resolve *another* tenant's post unless scoped. Rely on the global scope (so a foreign id throws `ModelNotFoundException` → 404) and/or use scoped bindings for nested routes (`->scopeBindings()` / `Route::scopeBindings()`). Never `Post::find($id)` straight from a route id without tenant scoping.
 6. **Validate foreign keys scoped to the tenant.** When input carries a related id (`category_id`, `assignee_id`), validate it with `Rule::exists(...)->where('tenant_id', $tenantId)`. An unscoped `exists:categories,id` lets a tenant attach another tenant's row — relationship smuggling.
 7. **Re-establish tenant context inside background work.** Jobs, queued listeners, notifications, scheduled commands, and exports run **outside the request**, where the "current tenant" is gone. Capture the tenant id at dispatch and restore it (set the current tenant) at the start of `handle()` **before any tenant-scoped query**. Otherwise the global scope runs with no tenant (returns everything) or the worker's leftover tenant (the previous job's) — a severe, easy-to-miss leak. Tenancy packages provide helpers (e.g. `tenancy()->initialize($tenant)`); if hand-rolled, set your container-bound current tenant explicitly.
 8. **Namespace cache and rate-limit keys by tenant** — `"tenant:{$id}:dashboard"`, never a bare `"dashboard"`. A shared key serves one tenant's cached data to another.
 9. **Scope file storage paths and signed URLs by tenant.** Store under `tenants/{id}/...` and never build a path or signed URL that another tenant can guess or enumerate.
-10. **In Filament, use first-class tenancy** (`$panel->tenant(Team::class)`, the `HasTenants` contract, the ownership relationship, `getTenantQuery`) rather than rolling your own — then still apply the Policy + scoping rules above. Resource queries must remain tenant-scoped.
+10. **In Filament, use first-class tenancy** (`$panel->tenant(Team::class, ownershipRelationship: 'team')`, the `HasTenants` contract with `getTenants()` / `canAccessTenant()`, and the auto-scoped resource query — override `scopeEloquentQueryToTenant()` only if you must) rather than rolling your own — then still apply the Policy + scoping rules above. Resource queries must remain tenant-scoped; remember Select/Repeater/relation-manager queries are NOT auto-scoped, so scope those yourself.
 11. **Use a proven package unless you have a reason not to.** `stancl/tenancy` (multi-database / domain-based) and `spatie/laravel-multitenancy` (single or multi DB) are battle-tested. This skill is the **guardrails that apply whichever you use** — including a hand-rolled single-DB `tenant_id` column. Do not mandate a package; do enforce the rules.
 12. **A cross-tenant isolation test is MANDATORY, not optional.** Every tenant-owned resource needs a test proving tenant B gets 403/404 — and no mutation — on tenant A's record (see *How to verify*). Treat a missing isolation test like a missing migration.
 
@@ -107,9 +107,12 @@ public function update(Request $request, Post $post)
 ```php
 // ✅ global scope makes binding tenant-safe (foreign id → 404),
 //    and the Policy verifies ownership for THIS action
+use Illuminate\Support\Facades\Gate;
+
 public function update(UpdatePostRequest $request, Post $post)
 {
-    $this->authorize('update', $post);     // PostPolicy::update checks tenant ownership
+    Gate::authorize('update', $post);      // PostPolicy::update checks tenant ownership
+    // (or $this->authorize(...) if your base controller `use`s AuthorizesRequests)
     $post->update($request->validated());  // tenant_id can't be reassigned
     return $post;
 }
@@ -224,7 +227,7 @@ grep -rn "exists:" app/Http/Requests app/Http/Controllers   # each must be tenan
 grep -rn "tenant_id" app/Models | grep -i "fillable"        # should be EMPTY
 
 # 5. Jobs that query tenant data but never restore context
-grep -rLn "currentTenant\|tenancy()->initialize" app/Jobs   # audit each that touches models
+grep -rL "currentTenant\|tenancy()->initialize" app/Jobs    # audit each that touches models
 
 # 6. Bare (non-namespaced) cache keys
 grep -rnE "Cache::(remember|put|get)\(" app/ | grep -v "tenant"
@@ -258,6 +261,6 @@ If you use `stancl/tenancy` or `spatie/laravel-multitenancy`, verify the bootstr
 - Global scopes (`addGlobalScope`, `Scope` contract): https://laravel.com/docs/eloquent#global-scopes
 - Scoped route-model binding (`scopeBindings`): https://laravel.com/docs/routing#implicit-model-binding-scoping
 - Validation `Rule::exists()->where(...)`: https://laravel.com/docs/validation#rule-exists
-- Filament multi-tenancy: https://filamentphp.com/docs/panels/tenancy
+- Filament multi-tenancy: https://filamentphp.com/docs/4.x/users/tenancy (v3: https://filamentphp.com/docs/3.x/panels/tenancy)
 - stancl/tenancy: https://tenancyforlaravel.com · spatie/laravel-multitenancy: https://spatie.be/docs/laravel-multitenancy
 - Pest architecture tests (`toUseTrait`): https://pestphp.com/docs/arch-testing

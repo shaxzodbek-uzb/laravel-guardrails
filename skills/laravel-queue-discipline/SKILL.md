@@ -27,7 +27,7 @@ A job looks like a normal method, so it gets written like one — and four assum
 5. **Prevent duplicate/overlapping runs.** Implement `ShouldBeUnique` with `uniqueId()` and `public int $uniqueFor` to dedupe identical dispatches; use the `WithoutOverlapping` middleware to serialize jobs sharing a key (e.g. per-account). Use `ShouldBeUniqueUntilProcessing` if a new dispatch should be allowed once processing starts.
 6. **Rate-limit external calls** with the `RateLimited` / `ThrottlesExceptions` middleware (returned from a `middleware()` method) instead of hammering a third-party API on every retry.
 7. **Always handle failure.** Implement `failed(\Throwable $e): void` to clean up, mark state, and alert. Monitor the `failed_jobs` table and alert on growth; use **Horizon** (Redis) for visibility, metrics, and balancing.
-8. **Keep payloads small — pass IDs, not blobs.** A job implementing `SerializesModels` serializes only a model's **key** and re-fetches it on run (fresh data — good). But a deleted model then throws `ModelNotFoundException`: set `public bool $deleteWhenMissingModels = true;` to discard the job instead. Never pass large arrays, file contents, or big collections into the constructor — pass an id/path and load inside `handle()`.
+8. **Keep payloads small — pass IDs, not blobs.** A job using the `SerializesModels` trait (bundled into the `Queueable` trait that `make:job` generates) serializes only a model's **key** and re-fetches it on run (fresh data — good). But a deleted model then throws `ModelNotFoundException`: set `public bool $deleteWhenMissingModels = true;` to discard the job instead. Never pass large arrays, file contents, or big collections into the constructor — pass an id/path and load inside `handle()`.
 9. **Don't write one multi-hour job.** Chunk the work (`chunkById`) or use **batching** — `Bus::batch([...])->then()->catch()->finally()->dispatch()` — and **chaining** — `Bus::chain([...])->dispatch()` — for sequential steps. Batches give progress and partial-failure handling; chains stop on first failure.
 10. **Route by latency.** Put slow/bulk jobs on a separate queue/connection from latency-sensitive ones, and run dedicated workers, so a backlog of exports doesn't delay password-reset emails.
 11. **Avoid unserializable payloads.** No closures, no resources, no PDO/connection objects in the constructor.
@@ -46,6 +46,8 @@ DB::transaction(function () use ($data) {
 
 class ChargeCustomer implements ShouldQueue
 {
+    use Queueable;
+
     public function __construct(public Order $order) {}
 
     public function handle(PaymentGateway $gw): void
@@ -142,13 +144,13 @@ Bus::batch($jobs)
 
 ```bash
 # 1. Queued jobs should set reliability knobs — find jobs missing $tries/$timeout
-grep -rLn "tries\|retryUntil" app/Jobs
+grep -rL "tries\|retryUntil" app/Jobs
 
 # 2. Dispatches inside a transaction must use afterCommit (or after_commit config)
 grep -rn "DB::transaction" app/ -A 15 | grep -i "dispatch(" | grep -v "afterCommit"
 
 # 3. Critical jobs should implement failed()
-grep -rLn "function failed" app/Jobs
+grep -rL "function failed" app/Jobs
 
 # 4. Fat payloads — constructors taking models/collections instead of ids
 grep -rnE "__construct\(.*(Collection|array \\\$).*\)" app/Jobs
