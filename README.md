@@ -7,7 +7,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/shaxzodbek-uzb/laravel-guardrails/actions/workflows/validate-skills.yml"><img src="https://github.com/shaxzodbek-uzb/laravel-guardrails/actions/workflows/validate-skills.yml/badge.svg" alt="Validate skills"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-FF2D20?logo=laravel&logoColor=white" alt="Laravel 11/12/13">
   <img src="https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Cursor%20%C2%B7%20Cline%20%C2%B7%20Gemini%20CLI-8A2BE2" alt="Agent compatibility">
