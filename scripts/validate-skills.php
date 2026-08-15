@@ -103,6 +103,15 @@ foreach ($skillFiles as $file) {
         $problems[] = "version '{$frontmatter['version']}' is not semver-like (e.g. 1.0.0)";
     }
 
+    // Real-YAML parseability. Our own parser is deliberately lenient, which once let
+    // through a description containing ": " — valid to us, a nested-mapping error to a
+    // real YAML parser, and therefore a skill no agent could load.
+    foreach (unquoted_colon_fields($m[1]) as $key) {
+        $problems[] = "field '{$key}' contains \": \" but is not quoted — a YAML parser reads that "
+            . 'as a nested mapping and the whole skill fails to load. Wrap the value in "double quotes" '
+            . 'or replace the colon with a dash.';
+    }
+
     // body
     if ($body === '') {
         $problems[] = 'body below the frontmatter is empty';
@@ -119,6 +128,40 @@ if ($errors === 0) {
 
 echo "{$red}✗ {$errors} skill(s) have problems{$reset}\n";
 exit(1);
+
+/**
+ * Top-level fields whose unquoted value contains ": ".
+ *
+ * A plain YAML scalar may not contain a colon followed by a space — the parser reads it
+ * as a nested mapping and errors with "Nested mappings are not allowed in compact
+ * mappings". The skill then fails to load entirely, which is exactly the silent-breakage
+ * this repo exists to prevent, so it is checked here rather than left to the agent.
+ *
+ * @return list<string>
+ */
+function unquoted_colon_fields(string $yaml): array
+{
+    $bad = [];
+    foreach (explode("\n", $yaml) as $line) {
+        if (!preg_match('/^([A-Za-z0-9_-]+):\s?(.*)$/', $line, $m)) {
+            continue;
+        }
+        $value = trim($m[2]);
+        if ($value === '') {
+            continue;
+        }
+        // A quoted scalar can hold anything.
+        $first = $value[0];
+        if (($first === '"' || $first === "'") && str_ends_with($value, $first)) {
+            continue;
+        }
+        if (str_contains($value, ': ')) {
+            $bad[] = $m[1];
+        }
+    }
+
+    return $bad;
+}
 
 /**
  * Minimal frontmatter parser for flat `key: value` scalars.

@@ -30,6 +30,8 @@ These are **guardrails, not a tutorial.** They don't duplicate [`laravel/agent-s
 | 🧱 **`laravel-migration-safety`** | Destructive / table-locking migrations that cause downtime or data loss on a populated database. |
 | ⏳ **`laravel-queue-discipline`** | Non-idempotent jobs, retry storms, dispatch-before-commit races, fat payloads. |
 | 🧪 **`laravel-pest-testing`** | Untested features and brittle, over-mocked tests that check implementation instead of behavior. |
+| 🔐 **`laravel-authorization-guard`** | Endpoints with no policy check, `Gate::before` that denies everything, roles that are mass-assignable, `Auth::user()` on the queue. |
+| ⚙️ **`laravel-config-env-safety`** | `env()` outside `config/` returning null once `config:cache` runs — plus `APP_DEBUG=true` in production dumping every secret. |
 | ✨ **`laravel-pint-formatting`** | Noisy diffs and style bikeshedding — keep AI-generated code matching house style. |
 
 Every skill is **version-resilient** (principles over API trivia, target: Laravel 11/12/13, PHP 8.2–8.4, Pest 3/4) and **portable** — plain `SKILL.md` with no agent-specific lock-in.
@@ -63,7 +65,7 @@ cp -R skills/laravel-multi-tenant-guard .claude/skills/
 # Cursor, Cline, Gemini CLI, etc. — point at that agent's skills/rules dir.
 ```
 
-Take all seven, or cherry-pick the ones you need. They're independent.
+Take all nine, or cherry-pick the ones you need. They're independent.
 
 ## How it works
 
